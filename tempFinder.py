@@ -43,10 +43,10 @@ class TempQuery(Resource):
         #print ("GETLAST Query result:\n")
         #pp.pprint( qRow)
         if qRow is not None:
-            return {"temperature":qRow[2], "timestamp":qRow[0], "zipCode":qRow[1]} 
+            return {"temperature":qRow[2], "query_time":qRow[0], "zipCode":qRow[1]} 
         else:
             #if no prev queries, return dummy query that will prompt Internet query
-            return {"temperature":0.0, "timestamp":0.0, "zipCode":zipCode}
+            return {"temperature":0.0, "query_time":0.0, "zipCode":zipCode}
 
 
     def isExpired( self, lQuery):
@@ -95,7 +95,7 @@ class TempQuery(Resource):
         #print( "getTempFromNet curTemp:\n")
         #pp.pprint( curTemp)
 
-        return {"temperature":curTemp, "timestamp":time.time(), "zipCode":zipCode} 
+        return {"temperature":curTemp, "query_time":time.time(), "zipCode":zipCode} 
 
 
     def get( self):
