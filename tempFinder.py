@@ -1,49 +1,62 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_restful import Resource, Api
-from sqlalchemy import create_engin
-from json import dumps
-from flask.ext.jsonify import jsonify, loads
-from urllib.request import urlopen
+from sqlalchemy import create_engine
+import json
+from urllib import urlopen
 import sqlite3
-import datetime
+from datetime import datetime
+import time
 import pprint
 
-dbName="/home/ubuntu/proj/pyWeatherCache/weatherCache.db"
-cityCodePortlandOR='5746545'
+dbName="/home/ubuntu/proj/pyWeatherCache/weathercache.db"
+#cityCodePortlandOR='5746545'
 zipCodePortlandOR='97214'
 expirationSecs=300
 weatherZipURL='http://api.openweathermap.org/data/2.5/weather?zip='
-weatherIdURL='http://api.openweathermap.org/data/2.5/weather?id='
+owmAPPID='781238aec79628b3c6647322cb2537f2'
 pp = pprint.PrettyPrinter(indent=4)
 
+#CODE for TESTING
+#class TempQuery:
 class TempQuery(Resource):
-    def saveQuery( curs, tempF, zipCode):
+    def saveQuery( self, curs, tempF):
         #insert most recent entry from weatherCache database
-        timestamp = datetime.timestamp()
-        rslt = curs.execute("INSERT INTO {tn} (timestamp, zipCode, tempF) VALUES({ts}, {cz}, {tf})"\
-                .format(tn='tempByCity', ts=timestamp, cz=zipCode, tf=tempF) )
-        return rslt
+        timestamp = int(time.time())
 
-
-    def getLast( curs, zipCode):
-        #select most recent entry from weatherCache database
-        query = curs.execute("SELECT timestamp, zipCode, tempF FROM {tn} WHERE zipCode={cz} ORDER BY timestamp DESC LIMIT 1".format(tn='tempByCity', cz=zipCode) )
+        query = "INSERT INTO temperature (timestamp, zipCode, tempF) VALUES(" + str(timestamp) + "," + tempF['zipCode'] + "," + str(tempF['temperature']) + ")"
 
         #data format check
-        print ("GETLAST Query result:\n")
-        pp.print( query)
+        #print ("SAVEQUERY query:\n")
+        #pp.pprint( query)
 
-        return {"temperature":query[2], "timestamp":query[0], "zipCode":query[1]} 
+        curs.execute( query)
+        return True
 
 
-    def isExpired( lQuery):
+    def getLast( self, curs, zipCode):
+        #select most recent entry from weatherCache database
+        query = "SELECT timestamp, zipCode, tempF FROM temperature WHERE zipCode=" + zipCode + " ORDER BY timestamp DESC LIMIT 1"
+        rslt = curs.execute( query)
+        qRow = curs.fetchone()
+
+        #data format check
+        #print ("GETLAST Query result:\n")
+        #pp.pprint( qRow)
+        if qRow is not None:
+            return {"temperature":qRow[2], "timestamp":qRow[0], "zipCode":qRow[1]} 
+        else:
+            #if no prev queries, return dummy query that will prompt Internet query
+            return {"temperature":0.0, "timestamp":0.0, "zipCode":zipCode}
+
+
+    def isExpired( self, lQuery):
         #Determine if last query occurred > expirationSec(ond)s ago [default=300 or 5 mins]
 
         #get query datetime from query timestamp
         lQueryTime = datetime.fromtimestamp( lQuery["timestamp"])
  
         #get current datetime
-        curTS = datetime.now()
+        curTime = datetime.now()
 
         #create timedelta from diff between datetimes
         timediff = curTime - lQueryTime
@@ -54,11 +67,15 @@ class TempQuery(Resource):
             return False
 
 
-    def getTempFromInternet( zipCode):
+    def getTempFromInternet( self, zipCode):
         #get current weather data at city desig. by zipCode from openweathermap.org
 
         dfltURL = weatherZipURL
-        url = dfltURL + zipCode
+        url = dfltURL + zipCode+ ',us&mode=json&APPID=' + owmAPPID
+
+        #data format check
+        #print( "getTempFromNet url:\n")
+        #pp.pprint( url)
 
         #get result from API query
         urlOut = urlopen( url).read()
@@ -68,17 +85,17 @@ class TempQuery(Resource):
         weather = json.loads( urlOut)
 
         #data format check
-        print( "getTempFromNet weather:\n")
-        pp.print( weather)
+        #print( "getTempFromNet weather:\n")
+        #pp.pprint( weather)
 
         #extract temperature from weather data
         curTemp = weather['main']['temp']
 
         #data format check
-        print( "getTempFromNet curTemp:\n")
-        pp.print( curTemp)
+        #print( "getTempFromNet curTemp:\n")
+        #pp.pprint( curTemp)
 
-        return {"temperature":curTemp, "timestamp":datetime.timestamp(), "zipCode":zipCode} 
+        return {"temperature":curTemp, "timestamp":time.time(), "zipCode":zipCode} 
 
 
     def get( self):
@@ -90,41 +107,44 @@ class TempQuery(Resource):
         dfltZip = zipCodePortlandOR
 
         conn = sqlite3.connect( dbName)
+        conn.row_factory = sqlite3.Row
         curs = conn.cursor()
 
         #get most recent query
-        lQuery = getLast( curs)
+        lQuery = self.getLast( curs, dfltZip)
 
         #data format check
-        print( "GET lQuery:\n")
-        pp.print( lQuery)
+        #print( "GET lQuery:\n")
+        #pp.pprint( lQuery)
 
         #check if query has been called recently
-        if isExpired( lQuery):
+        if self.isExpired( lQuery):
             #get weather/temp data from Internet
-            curTemp = getTempFromInternet( dfltZip)
+            curTemp = self.getTempFromInternet( dfltZip)
             #save results of recent query and save results to DB
-            rslt = saveQuery( curs, curTemp, dfltZip)
+            rslt = self.saveQuery( curs, curTemp)
             conn.commit()
         else:
             curTemp = lQuery
 
         #data format check
-        print( "GET curTemp:\n")
-        pp.print( curTemp)
+        #print( "GET curTemp:\n")
+        #pp.pprint( curTemp)
 
         #close DB connection
         conn.close()
 
         #return data in JSON format
-        return jsonify(result)
+        return jsonify( curTemp)
 
 
-#app = Flask(__name__)
-#api = Api(app)
-#api.add_resource(TempQuery, '/temperature')
+app = Flask(__name__)
+api = Api(app)
+api.add_resource(TempQuery, '/temperature')
 
-#if __name__ == '__main__':
-#    app.run(port='9001')
-#else:
-    TempQuery.get()
+if __name__ == '__main__':
+    app.run(port='9001')
+
+#CODE for TESTING
+#tQuery = TempQuery()
+#tQuery.get()
