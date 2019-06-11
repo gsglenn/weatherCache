@@ -16,8 +16,9 @@ weatherZipURL='http://api.openweathermap.org/data/2.5/weather?zip='
 owmAPPID='781238aec79628b3c6647322cb2537f2'
 pp = pprint.PrettyPrinter(indent=4)
 
-#CODE for TESTING
-#class TempQuery:
+app = Flask(__name__)
+api = Api(app)
+api.add_resource(TempQuery, '/temperature')
 class TempQuery(Resource):
     def saveQuery( self, curs, tempF):
         #insert most recent entry from weatherCache database
@@ -43,10 +44,10 @@ class TempQuery(Resource):
         #print ("GETLAST Query result:\n")
         #pp.pprint( qRow)
         if qRow is not None:
-            return {"temperature":qRow[2], "query_time":qRow[0], "zipCode":qRow[1]} 
+            return {"temperature":qRow[2], "timestamp":qRow[0], "zipCode":qRow[1]} 
         else:
             #if no prev queries, return dummy query that will prompt Internet query
-            return {"temperature":0.0, "query_time":0.0, "zipCode":zipCode}
+            return {"temperature":0.0, "timestamp":0.0, "zipCode":zipCode}
 
 
     def isExpired( self, lQuery):
@@ -95,7 +96,7 @@ class TempQuery(Resource):
         #print( "getTempFromNet curTemp:\n")
         #pp.pprint( curTemp)
 
-        return {"temperature":curTemp, "query_time":time.time(), "zipCode":zipCode} 
+        return {"temperature":curTemp, "timestamp":time.time(), "zipCode":zipCode} 
 
 
     def get( self):
@@ -103,6 +104,8 @@ class TempQuery(Resource):
         #if last query saved in DB was > 5min ago, return last query temperature;
         #else get current temperature from default API, and save the query data in DB
         #return temperature data in JSON format
+        tempDict={"query_time":"NOW", "temperature": 100.0, "zipCode":"97214"}
+        return jsonify( tempDict)
 
         dfltZip = zipCodePortlandOR
 
@@ -134,16 +137,13 @@ class TempQuery(Resource):
         #close DB connection
         conn.close()
 
+        #replace timestamp with human-readable query_time
+        curTemp["query_time"] = datetime.fromtimestamp( curTemp.pop("timestamp"))
         #return data in JSON format
         return jsonify( curTemp)
 
-
-app = Flask(__name__)
-api = Api(app)
-api.add_resource(TempQuery, '/temperature')
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port='9001')
+    app.run(host='0.0.0.0', port='9001', debug=True)
 
 #CODE for TESTING
 #tQuery = TempQuery()
